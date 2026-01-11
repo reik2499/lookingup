@@ -1,0 +1,103 @@
+//Lookingup 課題 PSM分析実戦
+import * as fs from 'fs';
+
+interface SurveyRespondent {
+  high: number;      // 高い
+  low: number;       // 安い
+  tooHigh: number;   // 高すぎる
+  tooLow: number;    // 安すぎる
+}
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+// 1. CSV読み込み
+function loadData(fileName: string): SurveyRespondent[] {
+  const csvData = fs.readFileSync(`${fileName}.csv`, 'utf-8');
+  const lines = csvData.trim().split('\n').slice(1);
+  return lines.map(line => {
+    const [, high, low, tooHigh, tooLow] = line.split(',').map(Number);
+    return { high, low, tooHigh, tooLow };
+  });
+}
+
+// 2. 累積割合計算
+function getRate(data: SurveyRespondent[], price: number, key: keyof SurveyRespondent, reverse: boolean): number {
+  const count = data.filter(d => reverse ? d[key] >= price : d[key] <= price).length;
+  return (count / data.length) * 100;
+}
+
+// 3. 交点計算式
+function calculateIntersection(p1: Point, p2: Point, p3: Point, p4: Point): number {
+  const { x: x1, y: y1 } = p1;
+  const { x: x2, y: y2 } = p2;
+  const { x: x3, y: y3 } = p3;
+  const { x: x4, y: y4 } = p4;
+
+  const denominator = (y1 - y2) * (x3 - x4) - (x1 - x2) * (y3 - y4);
+  if (denominator === 0) return 0; // 平行な場合
+
+  const numerator = (y3 - y1) * (x1 - x2) * (x3 - x4) + x1 * (y1 - y2) * (x3 - x4) - x3 * (y3 - y4) * (x1 - x2);
+  
+  return numerator / denominator;
+}
+
+// 4. 交点を算出
+function findIntersectionPrice(
+  data: SurveyRespondent[],
+  prices: number[],
+  k1: keyof SurveyRespondent, r1: boolean,
+  k2: keyof SurveyRespondent, r2: boolean
+): number {
+  for (let i = 0; i < prices.length - 1; i++) {
+    const xLeft = prices[i];
+    const xRight = prices[i + 1];
+
+    const y1Left = getRate(data, xLeft, k1, r1);
+    const y1Right = getRate(data, xRight, k1, r1);
+    const y2Left = getRate(data, xLeft, k2, r2);
+    const y2Right = getRate(data, xRight, k2, r2);
+
+    // グラフがこの区間で交差しているか確認
+    if ((y1Left <= y2Left && y1Right >= y2Right) || (y1Left >= y2Left && y1Right <= y2Right)) {
+      return calculateIntersection(
+        { x: xLeft, y: y1Left }, { x: xRight, y: y1Right },
+        { x: xLeft, y: y2Left }, { x: xRight, y: y2Right }
+      );
+    }
+  }
+  return 0;
+}
+
+// 5. メイン処理
+function analyzePSM(fileName: string) {
+  const data = loadData(fileName);
+  
+  // 分析対象の価格リスト（最小〜最大まで10円刻み等で生成）
+  const allValues = data.flatMap(d => [d.high, d.low, d.tooHigh, d.tooLow]);
+  const minPrice = Math.min(...allValues);
+  const maxPrice = Math.max(...allValues);
+  
+  const prices: number[] = [];
+  for (let p = Math.floor(minPrice / 10) * 10; p <= Math.ceil(maxPrice / 10) * 10; p += 10) {
+    prices.push(p);
+  }
+
+  const highest = findIntersectionPrice(data, prices, 'tooHigh', false, 'low', true);
+  const compromise = findIntersectionPrice(data, prices, 'high', false, 'low', true);
+  const ideal = findIntersectionPrice(data, prices, 'tooHigh', false, 'tooLow', true);
+  const lowest = findIntersectionPrice(data, prices, 'high', false, 'tooLow', true);
+
+  console.log(`--- PSM分析結果 (連立方程式による算出) ---`);
+  console.log(`最高価格：${highest.toFixed(1)}円`);
+  console.log(`妥協価格：${compromise.toFixed(1)}円`);
+  console.log(`理想価格：${ideal.toFixed(1)}円`);
+  console.log(`最低品質保証価格：${lowest.toFixed(1)}円`);
+}
+
+const fileName = process.argv.includes('--csvfile') ? process.argv[process.argv.indexOf('--csvfile') + 1] : 'PSMrawdata';
+analyzePSM(fileName);
+
+// 実行: psm.ts --csvfile PSMrawdata

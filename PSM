@@ -100,4 +100,9 @@ function analyzePSM(fileName: string) {
 const fileName = process.argv.includes('--csvfile') ? process.argv[process.argv.indexOf('--csvfile') + 1] : 'PSMrawdata';
 analyzePSM(fileName);
 
-// 実行: psm.ts --csvfile PSMrawdata
+// 実行: ts-node psm.ts --csvfile PSMrawdata
+/* PSM分析結果 (連立方程式による算出) 
+最高価格：296.7円
+妥協価格：291.0円
+理想価格：291.3円
+最低品質保証価格：247.5円*/
